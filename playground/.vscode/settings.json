@@ -1,0 +1,20 @@
+{
+    "nuxt.isNuxtApp": false,
+    "eslint.format.enable": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "always",
+    },
+    "css.validate": false,
+    "less.validate": false,
+    "scss.validate": false,
+    "vue.validate": false,
+    "stylelint.config": null,
+    "stylelint.validate": [
+        "css",
+        "scss",
+        "vue"
+    ],
+    "vue.codeActions.enabled": false,
+    "editor.cursorBlinking": "blink",
+    "editor.cursorStyle": "line"
+}

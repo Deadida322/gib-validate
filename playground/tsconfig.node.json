@@ -1,0 +1,10 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.lib.json",
+  "include": ["vite.config.*"],
+  "compilerOptions": {
+    "composite": true,
+    "types": ["node"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  }
+}

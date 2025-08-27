@@ -1,0 +1,27 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "src/**/*.d.ts",
+    "../src/**/*.ts",
+    "../src/**/*.vue",
+    "../src/**/*.d.ts"
+  ],
+  "compilerOptions": {
+      "composite": true,
+      "baseUrl": ".",
+      "noImplicitAny": false,
+    "paths": {
+      "@/*": ["./src/*", "../src/*"],
+      "gib-validate": ["..", "../src/index.ts"],
+      "gib-validate/*": ["../src/*"]
+    }
+  },
+
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

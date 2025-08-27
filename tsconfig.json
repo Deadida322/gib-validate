@@ -1,0 +1,16 @@
+{
+	"extends": "@tsconfig/recommended/tsconfig.json",
+	"include": ["src/**/*"],
+	"exclude": ["**/*.test.ts", "eslint.config.ts", "vite.config.ts"],
+	"compilerOptions": {
+		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+		"paths": {
+			"@/*": ["./src/*"]
+		},
+		"declaration": true,
+		"declarationMap": false
+	},
+	"declaration": true,
+	"declarationDir": "./dist",
+	"emitDeclarationOnly": true
+}
