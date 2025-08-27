@@ -1,6 +1,6 @@
 {
 	"name": "gib-validate",
-	"version": "0.8.9",
+	"version": "0.8.10",
 	"private": false,
 	"type": "module",
 	"main": "dist/gib-validate.cjs.js",
