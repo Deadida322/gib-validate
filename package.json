@@ -7,6 +7,21 @@
 	"module": "dist/gib-validate.es.js",
 	"types": "dist/index.d.ts",
 	"license": "MIT",
+	"author": "Aliev David",
+	"keywords": [
+		"vue",
+		"vue3",
+		"validation",
+		"form",
+		"validator",
+		"form-validation",
+		"vue-validation",
+		"composition-api"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Deadida322/gib-validate"
+	},
 	"files": [
 		"dist/",
 		"README.md",
