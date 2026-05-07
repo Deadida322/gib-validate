@@ -1,18 +1,14 @@
 # gib-validate
 
-gib-validate is a lightweight validation helper for Vue 3 (Composition API). It provides a set of common validation rules and a `useValidation` hook to validate reactive form state.
+gib-validate is a lightweight validation helper for Vue 3 Composition API. It validates Vue-readable form state with synchronous and asynchronous rules.
 
-### Quick summary
-- Peer dependency: Vue 3
-- Main exports: `useValidation`, a collection of rules (for example `required`, `minLength`, `isEmail`) and types (`ValidationState`, `ValidationRule`, `ValidationRules`, `Errors`).
-
-### Installation
+## Installation
 
 ```bash
 npm install gib-validate
 ```
 
-### Basic usage (Vue 3, Composition API)
+## Basic Usage
 
 ```ts
 import { reactive } from 'vue';
@@ -25,12 +21,13 @@ const rules = {
   password: [required(), minLength(8, 'Minimum 8 characters')]
 };
 
-// useValidation returns ComputedRef<ValidationState<T>>
 const v = useValidation(form, rules);
 
-// In script: access via v.value (v is a ComputedRef)
-// v.value.$errors, v.value.$touch(), v.value.$reset(), etc.
+async function submit() {
+  if (!(await v.value.$validate())) return;
 
+  // submit form
+}
 ```
 
 ```html
@@ -41,230 +38,138 @@ const v = useValidation(form, rules);
   <input v-model="form.password" type="password" />
   <div v-if="v.$errors.password">{{ v.$errors.password[0] }}</div>
 
-  <button @click="v.$touch()">Submit</button>
+  <button :disabled="v.$pending" @click="submit">Submit</button>
 </template>
 ```
 
-### API overview
-
-- useValidation:
-  - Returns a computed validation state exposing:
-    - `$touch()` — mark form as touched (marks all fields and child validators)
-    - `$reset()` — reset dirty/touched state
-    - `$touchField(field | fields)` — mark one or more fields as touched
-    - `$dirty: boolean` — whether the form was attempted/submitted
-    - `$errors: Errors<T>` — visible errors (only for touched fields)
-    - `$silentErrors: Errors<T>` — all validation errors regardless of touched state
-    - `$children` — support for nested validators (via provide/inject)
-
-### Dynamic rules
-
-The `useValidation` function now supports dynamic rules through computed properties. This allows you to change validation rules based on reactive conditions:
+`useValidation` accepts any Vue-readable state source: a `reactive` object, `ref` with an object, `computed`, getter, or a plain object. Reactive updates are tracked when the source itself is reactive.
 
 ```ts
-import { reactive, ref, computed } from 'vue';
+const form = ref({ email: '', password: '' });
+const v = useValidation(form, rules);
+
+const fromStore = useValidation(() => userStore.form, rules);
+```
+
+## API
+
+`useValidation(state, rules, name?)` returns a computed validation state:
+
+- `$touch()` marks all local fields and child validators as touched.
+- `$reset()` resets dirty/touched state, external errors, and children.
+- `$resetValidation()` resets local dirty/touched state and external errors.
+- `$touchField(field | fields)` marks one or more fields as touched.
+- `$resetField(field | fields)` resets touched state for one or more fields.
+- `$validate()` touches and validates the form, including children, and returns `Promise<boolean>`.
+- `$validateField(field)` touches and validates one field.
+- `$setExternalErrors(errors)` adds backend/server errors.
+- `$clearExternalErrors(field?)` clears backend/server errors.
+- `$dirty` is `true` after touch/validate.
+- `$pending` is `true` while async validation is running.
+- `$invalid`, `$valid`, `$error`, `$silentInvalid` expose validity flags.
+- `$errors` contains visible errors for touched fields.
+- `$silentErrors` contains all rule and external errors.
+- `$message` contains the first visible message per field.
+- `$children` contains nested validators.
+
+## Rules
+
+A rule receives `(value, state)` and returns `true` or an error message. It can be synchronous or asynchronous.
+
+```ts
+const samePassword = (value: string, state: { password: string }) => {
+  return value === state.password || 'Passwords do not match';
+};
+
+const uniqueEmail = async (email: string) => {
+  const ok = await api.checkEmail(email);
+  return ok || 'Email already exists';
+};
+```
+
+Format, length, range, file and comparison rules treat empty values as valid. Use `required` or `requiredIf` when a field must be filled.
+
+## Dynamic Rules
+
+```ts
+import { computed, reactive, ref } from 'vue';
 import { useValidation, required, minLength } from 'gib-validate';
 
 const form = reactive({ password: '' });
 const requirePassword = ref(false);
 
-// Dynamic rules based on reactive conditions
 const rules = computed(() => ({
-  password: requirePassword.value 
-    ? [required('Password is required'), minLength(8, 'Minimum 8 characters')] 
-    : [minLength(8, 'Minimum 8 characters')]
+  password: requirePassword.value
+    ? [required('Password is required'), minLength(8)]
+    : [minLength(8)]
 }));
 
 const v = useValidation(form, rules);
-
-// Later, when you change requirePassword, the validation rules will automatically update
-requirePassword.value = true;
 ```
 
-- useNamedValidation:
-  - Returns a reactive ref to a named validation:
-    - Allows reactive access to named validations
-    - Updates automatically when the named validation changes
-    - Returns undefined if no validation is registered with that name
-
-- Validation rules: a `ValidationRule<T>` returns `true` (success) or a string (error message). Rules can be synchronous or asynchronous (return Promise<string|boolean>).
-
-Types (short):
-- `ValidationRule<T>` = (value: T) => string | boolean | Promise<string | boolean>
-- `ValidationRules<T>` = { [K in keyof T]?: ValidationRule<T[K]>[] }
-- `Errors<T>` = Partial<Record<keyof T, string[]>>
-
-### Built-in rules
-
-The package exports a set of common rules from `src/rules`:
-
-- `required(error?)`
-- `requiredIf(...)`
-- `oneOf(...)`
-- `isEmail(...)`
-- `isUrl(...)`
-- `isPhone(...)`
-- `isNumeric(...)`
-- `isInteger(...)`
-- `isDate(...)`
-- `isPastDate(...)`, `isFutureDate(...)`
-- `isPassword(...)`
-- `fileType(...)`, `fileSizeLessThan(...)`
-- `equalTo(...)`
-- `contains(...)`
-- `between(...)`
-- `minLength(...)`, `maxLength(...)`
-
-Each rule typically accepts parameters (for example, `minLength(8, 'Too short')`) and returns a function that will be invoked with the value to validate.
-
-Example custom rules:
+## External Errors
 
 ```ts
-// sync rule
-const startsWithA = (v: string) => (v.startsWith('A') ? true : 'Must start with A');
-
-// async rule
-const uniqueEmail = async (email: string) => {
-  const ok = await checkEmailOnServer(email); // your API call
-  return ok ? true : 'Email already taken';
-};
-
+try {
+  await submitForm(form);
+} catch (error) {
+  v.value.$setExternalErrors({
+    email: ['Email already exists']
+  });
+}
 ```
 
-### Behavior and notes
+## Nested Validation
 
-- The hook watches the provided `state` and runs validation rules automatically, updating `$silentErrors`.
-- `$errors` contains only errors for fields that are touched (or after calling `$touch()`).
-- Rules return `true` on success or a string with an error message on failure. Async rules are supported.
-- Nested validators are supported: child validators register with a parent via provide/inject.
-
-### Nested validation
-
-gib-validate supports nested validators across component boundaries. When a child component calls `useValidation`, it will automatically register its validation state with a parent validator (if a parent is present) using provide/inject. This allows the parent to trigger child validation (`$touch`) and for child validators to be reset together with the parent.
-
-Key points:
-- Child validators register automatically; you don't need to pass the parent explicitly.
-- Parent's `$touch()` will call `$touch()` on registered children. Parent's `$reset()` will reset children as well.
-- Registered children appear under the parent's `$children` ref (keys are assigned internally, in insertion order).
-
-Simple example (Parent + Child component):
-
-Parent component (script setup):
+Child validators automatically register with the parent validator when they are created inside Vue setup.
 
 ```ts
-import { reactive } from 'vue';
-import { useValidation, required } from 'gib-validate';
-import AddressField from './AddressField.vue';
-
-const form = reactive({ name: '', address: { street: '', city: '' } });
-
-const rules = {
+// Parent
+const parentValidation = useValidation(form, {
   name: [required('Name required')]
-};
+});
 
-const v = useValidation(form, rules);
-
-// trigger parent + child validation before submit
-function onSubmit() {
-  v.value.$touch(); // will also touch children
-  // check parent errors and optionally inspect children via v.value.$children
-}
-```
-
-Child component `AddressField.vue` (script setup):
-
-```ts
-import { toRef } from 'vue';
-import { useValidation, required, minLength } from 'gib-validate';
-
-// props: { address }
-const street = toRef(props.address, 'street');
-const city = toRef(props.address, 'city');
-
-const rules = {
+// Child
+const addressValidation = useValidation(address, {
   street: [required('Street is required')],
-  city: [required('City is required'), minLength(2, 'Too short')]
-};
+  city: [required('City is required'), minLength(2)]
+}, 'addressForm');
 
-// useValidation in the child registers itself with the parent validator automatically
-const v = useValidation(props.address, rules);
-
+await parentValidation.value.$validate();
 ```
 
-How to inspect child errors from parent:
-
-```ts
-// v is parent's computed validation state
-// parent silent errors
-console.log(v.value.$silentErrors);
-
-// iterate registered children
-for (const [key, childState] of Object.entries(v.value.$children.value)) {
-  console.log('child errors', key, childState.$errors);
-}
-```
-
-Note: child validators are stored under `$children` as a `Ref<Record<string, ValidationState>>;` the keys are created internally and may change when children mount/unmount. Use `$children` for programmatic inspection only — prefer using high-level flows like `v.$touch()` on the parent which will propagate to children.
-
-### Named validations
-
-gib-validate also supports naming your validations to make them easier to access and manage. You can name both top-level validations and nested children validations.
-
-#### Named top-level validations
+## Named Validation
 
 ```ts
 import { reactive } from 'vue';
-import { useValidation, required, useNamedValidation } from 'gib-validate';
+import { useNamedValidation, useValidation, required } from 'gib-validate';
 
 const form = reactive({ name: '' });
-const rules = {
-  name: [required('Name is required')]
-};
+const v = useValidation(form, { name: [required()] }, 'userForm');
 
-// Register validation with a name
-const v = useValidation(form, rules, 'userForm');
-
-// Later, retrieve the validation by name from anywhere in your app
-// useNamedValidation returns a reactive ref that updates when the validation changes
 const userFormValidation = useNamedValidation('userForm');
-userFormValidation.value?.$touch(); // Trigger validation
+userFormValidation.value?.$touch();
 ```
 
-#### Named nested children validations
+## Built-in Rules
 
-When creating nested validations, you can provide names for children to make them easier to identify:
-
-```ts
-// Parent component
-import { reactive } from 'vue';
-import { useValidation, required } from 'gib-validate';
-
-const form = reactive({ name: '', address: { street: '', city: '' } });
-const rules = {
-  name: [required('Name required')]
-};
-
-// Parent validation (without name)
-const parentValidation = useValidation(form, rules);
-
-// Child component
-import { toRef } from 'vue';
-import { useValidation, required, minLength } from 'gib-validate';
-
-const address = toRef(props, 'address');
-const rules = {
-  street: [required('Street is required')],
-  city: [required('City is required'), minLength(2, 'Too short')]
-};
-
-// Child validation with name - this will appear in parent.$children under the key 'addressForm'
-const addressValidation = useValidation(address, rules, 'addressForm');
-
-// Now you can access the child by name:
-// parentValidation.value.$children.value['addressForm']
-```
-
-This makes it easier to work with nested validations as you can directly access children by meaningful names rather than numeric indices.
-</file_content>
-
-</file_content>
+- `required(error?)`
+- `requiredIf(condition, error?)`
+- `oneOf(list, error?)`
+- `isEmail(error?)`
+- `isUrl(error?)`
+- `isPhone(error?)`
+- `isNumeric(error?)`
+- `isInteger(error?)`
+- `isDate(error?)`
+- `isPastDate(error?)`
+- `isFutureDate(error?)`
+- `isPassword(minLen?, hasSpecialChar?, error?)`
+- `fileType(allowedTypes, error?)`
+- `fileSizeLessThan(maxMB, error?)`
+- `equalTo(target, error?)`
+- `sameAs(target, error?)`
+- `contains(valueToFind, error?)`
+- `between(min, max, error?)`
+- `minLength(min, error?)`
+- `maxLength(max, error?)`

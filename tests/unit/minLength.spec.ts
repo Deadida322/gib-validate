@@ -11,4 +11,8 @@ describe('minLength', () => {
 	it('should return default error message for invalid length', () => {
 		expect(minLength(30)('invalid length')).toBe('value too short');
 	});
+
+	it('should return true for an empty optional value', () => {
+		expect(minLength(2)('')).toBe(true);
+	});
 });

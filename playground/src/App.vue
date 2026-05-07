@@ -1,112 +1,110 @@
-<script setup lang="ts">
-	import {
-		useValidation,
-		required,
-		isEmail,
-		minLength,
-		isPassword,
-		useNamedValidation,
-		sameAs,
-		type ValidationRules
-	} from 'gib-validate';
-	import { reactive, computed } from 'vue';
-	import FormInput from './components/FormComponents/FormInput.vue';
-	import NestedForm from './components/NestedForm.vue';
-	import FormButton from './components/FormComponents/FormButton.vue';
-	import JsonViewer from 'vue-json-viewer';
-	const form = reactive({
-		email: '',
-		password: '',
-		repassword: ''
-	});
-
-	const rules = computed(() => ({
-		email: [required(), isEmail()],
-		password: [required(), minLength(6), isPassword(8)],
-		repassword: [required(), sameAs(form.password)]
-	})) as ValidationRules<typeof form>;
-
-	const v = useValidation(form, rules, 'parent');
-
-	const nested = useNamedValidation('nested');
-</script>
-
 <template>
-	<div class="root">
-		<form
-			class="form"
-			@submit.prevent="v.$touch()">
-			<h2>Родительская валидация</h2>
-			<div class="form-group">
-				<form-input
-					id="email"
-					v-model="form.email"
-					label="email"
-					:error="v.$message.email"
-					type="email"
-					@input="v.$resetField('email')"
-					@blur="v.$touchField('email')" />
-			</div>
-			<div class="form-group">
-				<form-input
-					v-model="form.password"
-					label="Password"
-					:error="v.$message.password"
-					type="password" />
-				<form-input
-					v-model="form.repassword"
-					label="Repeat password"
-					:error="v.$message.repassword"
-					type="password" />
-			</div>
-			<form class="form">
-				<nested-form />
-			</form>
-			<form-button
-				type="submit"
-				class="btn btn-primary">
-				Submit
-			</form-button>
-			<h6>Стейт родительский</h6>
-			<json-viewer
-				class="json"
-				:value="v" />
-			<h6>Стейт вложенный</h6>
-			<json-viewer
-				class="json"
-				:value="nested" />
-		</form>
+	<div class="app-shell">
+		<header class="topbar">
+			<router-link
+				class="brand"
+				to="/">
+				gib-validate
+			</router-link>
+
+			<nav class="nav">
+				<router-link to="/playground/form">Basic</router-link>
+				<router-link to="/playground/advanced">Advanced</router-link>
+				<router-link to="/playground/nested">Nested</router-link>
+				<router-link to="/playground/named">Named</router-link>
+			</nav>
+		</header>
+
+		<main>
+			<router-view />
+		</main>
 	</div>
 </template>
 
 <style>
-	#app {
-		font-family: Avenir, Helvetica, Arial, sans-serif;
-		-webkit-font-smoothing: antialiased;
-		-moz-osx-font-smoothing: grayscale;
-		color: rgb(44 62 80);
-		text-align: center;
-	}
-
 	* {
 		box-sizing: border-box;
 	}
 
-	/* Basic form styles */
-	.form {
-		max-width: 600px;
-		margin: 2rem auto;
-		padding: 2rem;
-		border: 1px solid rgb(226 232 240);
-		border-radius: 0.5rem;
-
-		background-color: rgb(255 255 255);
-		box-shadow:
-			0 4px 6px -1px rgb(0 0 0 / 10%),
-			0 2px 4px -1px rgb(0 0 0 / 6%);
+	body {
+		margin: 0;
+		font-family:
+			Inter,
+			ui-sans-serif,
+			system-ui,
+			-apple-system,
+			BlinkMacSystemFont,
+			'Segoe UI',
+			sans-serif;
+		color: rgb(31 41 55);
+		background: rgb(248 250 252);
 	}
 
-	.json {
-		text-align: left;
+	button,
+	input {
+		font: inherit;
+	}
+
+	.app-shell {
+		min-height: 100vh;
+	}
+
+	.topbar {
+		position: sticky;
+		z-index: 8;
+		top: 0;
+
+		display: flex;
+		gap: 24px;
+		align-items: center;
+		justify-content: space-between;
+
+		padding: 14px 28px;
+		border-bottom: 1px solid rgb(226 232 240);
+
+		background: rgb(255 255 255 / 92%);
+		backdrop-filter: blur(12px);
+	}
+
+	.brand {
+		font-weight: 800;
+		color: rgb(15 23 42);
+		text-decoration: none;
+	}
+
+	.nav {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		justify-content: flex-end;
+	}
+
+	.nav a {
+		padding: 8px 10px;
+		border-radius: 6px;
+		color: rgb(71 85 105);
+		text-decoration: none;
+	}
+
+	.nav a.router-link-active {
+		color: rgb(22 101 52);
+		background: rgb(220 252 231);
+	}
+
+	main {
+		width: min(1120px, calc(100vw - 32px));
+		margin: 0 auto;
+		padding: 32px 0 48px;
+	}
+
+	@media (width <= 720px) {
+		.topbar {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+
+		.nav {
+			justify-content: flex-start;
+		}
 	}
 </style>

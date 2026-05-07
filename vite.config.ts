@@ -30,6 +30,7 @@ export default defineConfig({
 		lib: {
 			entry: resolve(__dirname, 'src/index.ts'),
 			name: 'gib-validate',
+			formats: ['es', 'cjs', 'umd'],
 			fileName: (format) => `gib-validate.${format}.js`
 		},
 		rollupOptions: {

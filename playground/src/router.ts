@@ -1,9 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import PlaygroundPage from './components/PlaygroundPage.vue';
-import PlaygroundForm from './components/Playground/Form.vue';
-import PlaygroundNested from './components/Playground/Nested.vue';
+import PlaygroundForm from './views/BasicValidationDemo.vue';
+import PlaygroundAdvanced from './views/AdvancedValidationDemo.vue';
+import PlaygroundNested from './views/NestedValidationDemo.vue';
 import NamedValidationDemo from './components/NamedValidationDemo.vue';
-import FormComponentsDemo from './components/FormComponentsDemo.vue';
 
 const routes = [
 	{
@@ -17,6 +17,11 @@ const routes = [
 		component: PlaygroundForm
 	},
 	{
+		path: '/playground/advanced',
+		name: 'advanced',
+		component: PlaygroundAdvanced
+	},
+	{
 		path: '/playground/nested',
 		name: 'nested',
 		component: PlaygroundNested
@@ -25,11 +30,6 @@ const routes = [
 		path: '/playground/named',
 		name: 'named',
 		component: NamedValidationDemo
-	},
-	{
-		path: '/playground/components',
-		name: 'components',
-		component: FormComponentsDemo
 	}
 ];
 

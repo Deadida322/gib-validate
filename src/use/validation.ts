@@ -1,10 +1,4 @@
-import type {
-	Errors,
-	Validatable,
-	ValidationRules,
-	ValidationState,
-	ValidationRule
-} from '@/types';
+import type { Errors, Validatable, ValidationRules, ValidationState } from '@/types';
 import {
 	ref,
 	computed,
@@ -15,17 +9,19 @@ import {
 	type Ref,
 	inject,
 	watchEffect,
-	type Reactive,
 	shallowRef,
 	provide,
 	type MaybeRefOrGetter,
-	toValue
+	toValue,
+	getCurrentInstance,
+	onUnmounted
 } from 'vue';
 
 const ValidationSymbol: InjectionKey<Ref<ValidationState>> = Symbol('vuelidate');
 
 const validationRegistry = new Map<string, ValidationState>();
 const validationRefs = new Map<string, Ref<ValidationState | undefined>>();
+let autoValidationId = 0;
 
 export function registerValidation(name: string, state: ValidationState): void {
 	validationRegistry.set(name, state);
@@ -66,30 +62,40 @@ export type ValidationResult<T extends object> = ComputedRef<ValidationState<T>>
 export type ValidationRulesResult<T extends Record<string, Validatable>> = ComputedRef<
 	ValidationRules<T>
 >;
+export type ValidationStateSource<T extends Record<string, Validatable>> = MaybeRefOrGetter<T>;
+
 export function useValidation<T extends Record<string, Validatable>>(
-	state: Reactive<T>,
+	state: ValidationStateSource<T>,
 	rules: MaybeRefOrGetter<ValidationRules<T>>,
 	name?: string
 ): ValidationResult<T> {
 	const $dirty = ref(false);
-	const $silentErrors = ref({}) as Ref<Errors<T>>;
+	const $ruleErrors = ref({}) as Ref<Errors<T>>;
+	const $externalErrors = ref({}) as Ref<Errors<T>>;
+	const $pending = ref(false);
 	const $touched = shallowRef<Set<keyof T>>(new Set());
 	const $children = ref<Record<string, ValidationState<object>>>({});
+	let validationRunId = 0;
 
 	const $touch = () => {
 		$dirty.value = true;
-		$touchField(Object.keys(unref(rules)) as (keyof T)[]);
-		Object.entries($children.value).forEach(([_key, child]) => {
-			(child as ValidationState<object>).$touch();
-		});
+		$touchField(Object.keys(toValue(rules)) as (keyof T)[]);
+		for (const key in $children.value) {
+			$children.value[key].$touch();
+		}
 	};
 
 	const $reset = () => {
+		$resetValidation();
+		for (const key in $children.value) {
+			$children.value[key].$reset();
+		}
+	};
+
+	const $resetValidation = () => {
 		$dirty.value = false;
 		$touched.value = new Set([]);
-		Object.entries($children.value).forEach(([_key, child]) => {
-			(child as ValidationState<object>).$reset();
-		});
+		$externalErrors.value = {};
 	};
 
 	const $touchField = (field: keyof T | (keyof T)[]) => {
@@ -110,6 +116,47 @@ export function useValidation<T extends Record<string, Validatable>>(
 		$touched.value = newTouched;
 	};
 
+	const $setExternalErrors = (errors: Errors<T>) => {
+		$externalErrors.value = errors;
+	};
+
+	const $clearExternalErrors = (field?: keyof T | (keyof T)[]) => {
+		if (!field) {
+			$externalErrors.value = {};
+			return;
+		}
+
+		const fieldsToRemove = Array.isArray(field) ? field : [field];
+		const nextErrors = { ...$externalErrors.value };
+
+		fieldsToRemove.forEach((field) => {
+			delete nextErrors[field];
+		});
+
+		$externalErrors.value = nextErrors;
+	};
+
+	const $silentErrors = computed<Errors<T>>(() => {
+		const errors: Errors<T> = {};
+		const keys = new Set<keyof T>([
+			...(Object.keys($ruleErrors.value) as (keyof T)[]),
+			...(Object.keys($externalErrors.value) as (keyof T)[])
+		]);
+
+		for (const key of keys) {
+			const fieldErrors = [
+				...($ruleErrors.value[key] ?? []),
+				...($externalErrors.value[key] ?? [])
+			];
+
+			if (fieldErrors.length) {
+				errors[key] = fieldErrors;
+			}
+		}
+
+		return errors;
+	});
+
 	const $errors = computed<Errors<T>>(() => {
 		const errors: Errors<T> = {};
 		const plainErrors = toValue($silentErrors);
@@ -123,81 +170,173 @@ export function useValidation<T extends Record<string, Validatable>>(
 	});
 
 	const $message = computed(() => {
-		return Object.entries($errors.value).reduce(
-			(acc, [key, value]) => {
-				if (!value?.length) return acc;
-				acc[key as keyof T] = value[0];
-				return acc;
-			},
-			{} as Record<keyof T, string>
-		);
+		const messages = {} as Record<keyof T, string>;
+		const errors = $errors.value;
+		const keys = Object.keys(errors) as (keyof T)[];
+
+		for (const key of keys) {
+			const value = errors[key];
+			if (value?.length) {
+				messages[key] = value[0];
+			}
+		}
+
+		return messages;
 	});
 
-	watch(
-		[() => ({ ...(state as T) }), () => rules],
-		async ([currentState, currentRules]) => {
-			const newErrors: Errors<T> = {};
-			const resolvedRules = unref(currentRules) as ValidationRules<T>;
+	const runValidation = async (
+		fields?: (keyof T)[],
+		commitWhenCurrent = false
+	): Promise<Errors<T>> => {
+		const runId = ++validationRunId;
+		$pending.value = true;
 
-			for (const key in resolvedRules) {
-				const ruleSet = resolvedRules[key];
-				if (ruleSet) {
-					const ruleResults = await Promise.all(
-						(ruleSet as Array<ValidationRule<T[typeof key]>>).map(async (rule) => {
-							if (!rule) return true;
-							const result = await rule(unref(currentState[key]));
-							return typeof result === 'string' ? result : null;
-						})
-					);
+		const currentState = toValue(state);
+		const currentRules = toValue(rules);
+		const nextErrors: Errors<T> = fields ? { ...$ruleErrors.value } : {};
+		const keys = (fields ?? (Object.keys(currentRules) as (keyof T)[])).filter(
+			(key) => currentRules[key]
+		);
 
-					const filteredResults = ruleResults.filter(
-						(result): result is string => typeof result === 'string'
-					);
+		for (const key of keys) {
+			const ruleSet = currentRules[key];
+			if (!ruleSet) continue;
 
-					if (filteredResults.length > 0) {
-						newErrors[key] = filteredResults;
+			const ruleResults = await Promise.all(
+				ruleSet.map(async (rule) => {
+					const resolvedRule = unref(rule);
+					if (!resolvedRule) return true;
+
+					try {
+						const result = await resolvedRule(unref(currentState[key]), currentState);
+						return typeof result === 'string' ? result : null;
+					} catch (error) {
+						return error instanceof Error ? error.message : String(error);
 					}
-				}
+				})
+			);
+
+			const filteredResults = ruleResults.filter(
+				(result): result is string => typeof result === 'string'
+			);
+
+			if (filteredResults.length > 0) {
+				nextErrors[key] = filteredResults;
+			} else {
+				delete nextErrors[key];
 			}
-			$silentErrors.value = newErrors;
+		}
+
+		const shouldCommit =
+			runId === validationRunId ||
+			(commitWhenCurrent &&
+				keys.every((key) => unref(toValue(state)[key]) === unref(currentState[key])));
+
+		if (shouldCommit) {
+			$ruleErrors.value = nextErrors;
+			$pending.value = false;
+		}
+
+		return nextErrors;
+	};
+
+	const $validateField = async (field: keyof T): Promise<boolean> => {
+		$touchField(field);
+		const validationErrors = await runValidation([field], true);
+		return !validationErrors[field]?.length && !$externalErrors.value[field]?.length;
+	};
+
+	const $validate = async (): Promise<boolean> => {
+		$touch();
+		await runValidation();
+
+		const childResults = await Promise.all(
+			Object.keys($children.value).map((key) => $children.value[key].$validate())
+		);
+
+		return !$silentInvalid.value && childResults.every(Boolean);
+	};
+
+	watch(
+		[() => ({ ...toValue(state) }), () => toValue(rules)],
+		async () => {
+			await runValidation();
 		},
 		{ immediate: true }
 	);
+
+	const $silentInvalid = computed(() => {
+		return (
+			Object.keys($silentErrors.value).length > 0 ||
+			Object.values($children.value).some((child) => child.$silentInvalid)
+		);
+	});
+	const $invalid = computed(() => $silentInvalid.value);
+	const $valid = computed(() => !$invalid.value);
+	const $error = computed(() => {
+		return (
+			Object.keys($errors.value).length > 0 ||
+			Object.values($children.value).some((child) => child.$error)
+		);
+	});
+	const $isPending = computed(() => {
+		return $pending.value || Object.values($children.value).some((child) => child.$pending);
+	});
 
 	const validationState = computed<ValidationState<T>>(() => ({
 		$touch,
 		$touched,
 		$reset,
+		$resetValidation,
+		$validate,
 		$resetField,
 		$touchField,
+		$validateField,
+		$setExternalErrors,
+		$clearExternalErrors,
 		$dirty: $dirty.value,
+		$pending: $isPending.value,
+		$invalid: $invalid.value,
+		$valid: $valid.value,
+		$error: $error.value,
+		$silentInvalid: $silentInvalid.value,
 		$message: $message.value,
 		$errors: $errors.value,
 		$silentErrors: $silentErrors.value,
 		$children: $children.value
 	}));
 
-	const parent = inject(ValidationSymbol, null);
-	if (parent) {
-		watchEffect(() => {
-			const key = name || Object.keys(parent.value.$children).length.toString();
-			parent.value.$children[key] = validationState.value;
-		});
-	}
+	const instance = getCurrentInstance();
+	if (instance) {
+		const parent = inject(ValidationSymbol, null);
+		if (parent) {
+			const key = name || (autoValidationId++).toString();
+			watchEffect(() => {
+				parent.value.$children[key] = validationState.value;
+			});
 
-	if (name) {
+			onUnmounted(() => {
+				delete parent.value.$children[key];
+			});
+		}
+
+		if (name) {
+			watchEffect(() => {
+				registerValidation(name, validationState.value);
+			});
+
+			onUnmounted(() => {
+				unregisterValidation(name);
+			});
+		}
+
+		provide(ValidationSymbol, validationState);
+	} else if (name) {
 		watchEffect(() => {
 			registerValidation(name, validationState.value);
 		});
-
-		watchEffect(() => {
-			return () => {
-				unregisterValidation(name);
-			};
-		});
 	}
 
-	provide(ValidationSymbol, validationState);
 	return validationState as ValidationResult<T>;
 }
 

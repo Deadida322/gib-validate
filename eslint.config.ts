@@ -3,11 +3,13 @@ import tseslint from 'typescript-eslint';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 
 export default tseslint.config(
+	{
+		ignores: ['dist/**', 'playground/**', 'node_modules/**', 'coverage/**']
+	},
 	eslint.configs.recommended,
 	...tseslint.configs.recommended,
 	{
 		files: ['**/*.{ts,tsx,js,jsx}'],
-		ignores: ['dist'],
 		rules: {
 			quotes: [0, 'single'],
 			'@typescript-eslint/no-unused-vars': [

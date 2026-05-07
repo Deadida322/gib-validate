@@ -1,9 +1,15 @@
+import { isEmptyValue } from './utils';
+
 export const isEmail =
 	(error = 'invalid email') =>
-	(value: string): boolean | string => {
+	(value: string | null | undefined): boolean | string => {
+		if (isEmptyValue(value)) {
+			return true;
+		}
+
 		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-		if (!value || value.length > 254 || !emailRegex.test(value)) {
+		if (value.length > 254 || !emailRegex.test(value)) {
 			return error;
 		}
 

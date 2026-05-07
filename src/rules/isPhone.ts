@@ -1,8 +1,14 @@
+import { isEmptyValue } from './utils';
+
 export const isPhone =
 	(error = 'invalid phone number') =>
-	(value: string): boolean | string => {
+	(value: string | null | undefined): boolean | string => {
+		if (isEmptyValue(value)) {
+			return true;
+		}
+
 		const phoneRegex = /^\+?[0-9\s\-()]{7,}$/;
-		if (!value || !phoneRegex.test(value)) {
+		if (!phoneRegex.test(value)) {
 			return error;
 		}
 		return true;

@@ -1,12 +1,12 @@
 <template>
 	<div class="playground-page">
 		<h1>gib-validate Playground</h1>
-		<p>Quick demos showing basic usage and nested validation.</p>
+		<p>Interactive forms for the current validation API.</p>
 		<ul>
 			<li><router-link to="/playground/form">Form demo</router-link></li>
+			<li><router-link to="/playground/advanced">Advanced API demo</router-link></li>
 			<li><router-link to="/playground/nested">Nested validation demo</router-link></li>
 			<li><router-link to="/playground/named">Named validation demo</router-link></li>
-			<li><router-link to="/playground/components">Form components demo</router-link></li>
 		</ul>
 	</div>
 </template>

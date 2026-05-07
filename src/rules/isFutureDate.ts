@@ -1,6 +1,9 @@
+import { isEmptyValue } from './utils';
+
 export const isFutureDate =
 	(error = 'date must be in the future') =>
-	(value: string): boolean | string => {
+	(value: string | null | undefined): boolean | string => {
+		if (isEmptyValue(value)) return true;
 		const now = new Date();
 		const date = new Date(value);
 
